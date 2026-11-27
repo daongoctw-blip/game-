@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Turbo Neon Racer 2D</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    .game-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      height: 100vh;
+      max-height: 740px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 25px rgba(56, 189, 248, 0.25);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #111827;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .badge {
+      background: rgba(15, 23, 42, 0.82);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      padding: 8px 12px;
+      border-radius: 10px;
+      backdrop-filter: blur(4px);
+    }
+    .badge .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+    .badge .value {
+      font-size: 20px;
+      font-weight: 800;
+      color: #38bdf8;
+    }
+    .nitro-wrap {
+      margin-top: 6px;
+      width: 110px;
+      height: 8px;
+      background: #1e293b;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+    .nitro-bar {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #06b6d4, #3b82f6, #a855f7);
+      transition: width 0.08s linear;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(9, 13, 22, 0.84);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      z-index: 10;
+    }
+    .overlay.hidden {
+      display: none;
+    }
+    .title {
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, #38bdf8, #f43f5e, #facc15);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    .controls-info {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #e2e8f0;
+      margin-bottom: 22px;
+      text-align: left;
+      width: 100%;
+    }
+    .controls-info div {
+      margin: 4px 0;
+    }
+    .btn {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #fff;
+      border: none;
+      padding: 14px 32px;
+      font-size: 17px;
+      font-weight: 700;
+      border-radius: 999px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.45);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(37, 99, 235, 0.65);
+    }
+    .btn:active {
+      transform: scale(0.97);
+    }
+    .mobile-controls {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 6;
+      pointer-events: none;
+    }
+    .touch-btn {
+      pointer-events: auto;
+      width: 68px;
+      height: 56px;
+      border-radius: 14px;
+      background: rgba(30, 41, 59, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #f8fafc;
+      font-size: 22px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+    .touch-btn:active {
+      background: rgba(56, 189, 248, 0.45);
+    }
+    .touch-nitro {
+      width: 96px;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      border-color: rgba(168, 85, 247, 0.6);
+    }
+    @media (min-width: 769px) {
+      .mobile-controls {
+        opacity: 0.45;
+      }
+      .mobile-controls:hover {
+        opacity: 0.9;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-wrapper">
+    <div class="hud">
+      <div class="badge">
+        <div class="label">Điểm số</div>
+        <div class="value" id="scoreEl">0</div>
+        <div class="nitro-wrap" title="Năng lượng Nitro">
+          <div class="nitro-bar" id="nitroBar"></div>
+        </div>
+      </div>
+      <div class="badge" style="text-align: right;">
+        <div class="label">Kỷ lục</div>
+        <div class="value" id="highScoreEl" style="color: #facc15;">0</div>
+        <div class="label" id="speedEl" style="margin-top: 4px; color: #38bdf8;">120 KM/H</div>
+      </div>
+    </div>
+
+    <canvas id="gameCanvas" width="420" height="740"></canvas>
+
+    <!-- Màn hình bắt đầu / Kết thúc -->
+    <div class="overlay" id="overlay">
+      <div class="title" id="overlayTitle">TURBO NEON RACER</div>
+      <div class="subtitle" id="overlayDesc">
+        Lạng lách qua dòng xe cao tốc, thu thập xu vàng và bình Nitro để đạt điểm cao nhất!
+      </div>
+      <div class="controls-info">
+        <div>⬅️ ➡️ hoặc <b>A / D</b>: Đánh lái trái / phải</div>
+        <div>⬆️ hoặc <b>W / Space</b>: Kích hoạt tăng tốc Nitro</div>
+        <div>🪙 <b>Xu vàng</b>: +50 điểm &nbsp;|&nbsp; ⚡ <b>Bình Nitro</b>: +100 điểm & hồi năng lượng</div>
+      </div>
+      <button class="btn" id="startBtn">BẮT ĐẦU ĐUA</button>
+    </div>
+
+    <!-- Nút cảm ứng cho điện thoại -->
+    <div class="mobile-controls">
+      <div style="display: flex; gap: 10px;">
+        <button class="touch-btn" id="btnLeft">◀</button>
+        <button class="touch-btn" id="btnRight">▶</button>
+      </div>
+      <button class="touch-btn touch-nitro" id="btnNitro">NITRO ⚡</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("scoreEl");
+    const highScoreEl = document.getElementById("highScoreEl");
+    const speedEl = document.getElementById("speedEl");
+    const nitroBar = document.getElementById("nitroBar");
+    const overlay = document.getElementById("overlay");
+    const overlayTitle = document.getElementById("overlayTitle");
+    const overlayDesc = document.getElementById("overlayDesc");
+    const startBtn = document.getElementById("startBtn");
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const ROAD_LEFT = 46;
+    const ROAD_RIGHT = W - 46;
+    const ROAD_WIDTH = ROAD_RIGHT - ROAD_LEFT;
+    const LANES = 4;
+    const LANE_WIDTH = ROAD_WIDTH / LANES;
+
+    // Âm thanh tổng hợp đơn giản (không cần file ngoài)
+    let audioCtx = null;
+    function playTone(freq, type, duration, vol = 0.08) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    let highScore = Number(localStorage.getItem("turbo_neon_highscore") || 0);
+    highScoreEl.textContent = highScore;
+
+    const keys = { left: false, right: false, nitro: false };
+
+    window.addEventListener("keydown", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "arrowleft" || k === "a") keys.left = true;
+      if (k === "arrowright" || k === "d") keys.right = true;
+      if (k === "arrowup" || k === "w" || k === " ") keys.nitro = true;
+    });
+
+    window.addEventListener("keyup", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "arrowleft" || k === "a") keys.left = false;
+      if (k === "arrowright" || k === "d") keys.right = false;
+      if (k === "arrowup" || k === "w" || k === " ") keys.nitro = false;
+    });
+
+    function bindTouchButton(id, prop) {
+      const el = document.getElementById(id);
+      const onStart = (e) => { e.preventDefault(); keys[prop] = true; };
+      const onEnd = (e) => { e.preventDefault(); keys[prop] = false; };
+      el.addEventListener("touchstart", onStart, { passive: false });
+      el.addEventListener("touchend", onEnd, { passive: false });
+      el.addEventListener("mousedown", onStart);
+      el.addEventListener("mouseup", onEnd);
+      el.addEventListener("mouseleave", onEnd);
+    }
+    bindTouchButton("btnLeft", "left");
+    bindTouchButton("btnRight", "right");
+    bindTouchButton("btnNitro", "nitro");
+
+    let gameState = "MENU"; // MENU | PLAYING | GAMEOVER
+    let score = 0;
+    let baseSpeed = 340;
+    let roadOffset = 0;
+    let spawnEnemyTimer = 0;
+    let spawnPickupTimer = 0;
+    let shakeTime = 0;
+
+    const player = {
+      x: W / 2 - 22,
+      y: H - 150,
+      w: 44,
+      h: 82,
+      vx: 0,
+      maxSteer: 340,
+      nitro: 100,
+      tilt: 0
+    };
+
+    let enemies = [];
+    let pickups = [];
+    let particles = [];
+
+    const ENEMY_COLORS = [
+      { body: "#ef4444", roof: "#991b1b" },
+      { body: "#f97316", roof: "#9a3412" },
+      { body: "#10b981", roof: "#065f46" },
+      { body: "#a855f7", roof: "#581c87" },
+      { body: "#eab308", roof: "#854d0e" }
+    ];
+
+    function resetGame() {
+      score = 0;
+      baseSpeed = 340;
+      roadOffset = 0;
+      spawnEnemyTimer = 0;
+      spawnPickupTimer = 0;
+      shakeTime = 0;
+      enemies = [];
+      pickups = [];
+      particles = [];
+
+      player.x = W / 2 - player.w / 2;
+      player.y = H - 150;
+      player.vx = 0;
+      player.nitro = 100;
+      player.tilt = 0;
+
+      scoreEl.textContent = "0";
+      nitroBar.style.width = "100%";
+      gameState = "PLAYING";
+      overlay.classList.add("hidden");
+      playTone(440, "triangle", 0.15, 0.1);
+    }
+
+    startBtn.addEventListener("click", resetGame);
+
+    function getLaneCenterX(laneIndex, objWidth) {
+      return ROAD_LEFT + laneIndex * LANE_WIDTH + (LANE_WIDTH - objWidth) / 2;
+    }
+
+    function spawnEnemy() {
+      const lane = Math.floor(Math.random() * LANES);
+      const w = 44;
+      const h = 80;
+      const x = getLaneCenterX(lane, w);
+
+      // Tránh sinh xe đè sát xe vừa xuất hiện
+      for (const e of enemies) {
+        if (Math.abs(e.x - x) < 35 && e.y < 140) return;
+      }
+
+      const palette = ENEMY_COLORS[Math.floor(Math.random() * ENEMY_COLORS.length)];
+      enemies.push({
+        x,
+        y: -h - 20,
+        w,
+        h,
+        speedOffset: 90 + Math.random() * 110,
+        color: palette
+      });
+    }
+
+    function spawnPickup() {
+      const lane = Math.floor(Math.random() * LANES);
+      const isNitro = Math.random() < 0.28;
+      const size = isNitro ? 28 : 24;
+      const x = getLaneCenterX(lane, size);
+
+      for (const e of enemies) {
+        if (Math.abs(e.x - x) < 40 && e.y < 100) return;
+      }
+
+      pickups.push({
+        x,
+        y: -size - 10,
+        w: size,
+        h: size,
+        type: isNitro ? "NITRO" : "COIN",
+        pulse: 0
+      });
+    }
+
+    function addExhaustParticle(x, y, isNitro) {
+      particles.push({
+        x: x + (Math.random() - 0.5) * 10,
+        y,
+        vx: (Math.random() - 0.5) * 30,
+        vy: 120 + Math.random() * 90,
+        life: 0.28,
+        maxLife: 0.28,
+        size: isNitro ? 7 : 4,
+        color: isNitro ? "#38bdf8" : "#94a3b8"
+      });
+    }
+
+    function addExplosion(x, y) {
+      for (let i = 0; i < 36; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd = 60 + Math.random() * 260;
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * spd,
+          vy: Math.sin(angle) * spd,
+          life: 0.65,
+          maxLife: 0.65,
+          size: 4 + Math.random() * 6,
+          color: Math.random() < 0.5 ? "#f43f5e" : "#facc15"
+        });
+      }
+    }
+
+    function checkCollision(a, b, pad = 6) {
+      return (
+        a.x + pad < b.x + b.w - pad &&
+        a.x + a.w - pad > b.x + pad &&
+        a.y + pad < b.y + b.h - pad &&
+        a.y + a.h - pad > b.y + pad
+      );
+    }
+
+    function update(dt) {
+      if (shakeTime > 0) shakeTime = Math.max(0, shakeTime - dt);
+
+      // Cập nhật hạt hiệu ứng
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      if (gameState !== "PLAYING") return;
+
+      // Tăng độ khó dần theo điểm
+      baseSpeed = Math.min(760, 340 + score * 0.16);
+      const isBoosting = keys.nitro && player.nitro > 2;
+      const currentSpeed = isBoosting ? baseSpeed * 1.48 : baseSpeed;
+
+      if (isBoosting) {
+        player.nitro = Math.max(0, player.nitro - 38 * dt);
+      } else {
+        player.nitro = Math.min(100, player.nitro + 8 * dt);
+      }
+      nitroBar.style.width = `${player.nitro}%`;
+
+      // Điểm số tăng theo quãng đường
+      score += (currentSpeed * dt) * 0.06;
+      const displayScore = Math.floor(score);
+      scoreEl.textContent = displayScore;
+      speedEl.textContent = `${Math.round(currentSpeed * 0.36)} KM/H`;
+
+      // Đánh lái trái/phải
+      let steer = 0;
+      if (keys.left) steer -= 1;
+      if (keys.right) steer += 1;
+
+      player.x += steer * player.maxSteer * dt;
+      player.x = Math.max(ROAD_LEFT + 4, Math.min(ROAD_RIGHT - player.w - 4, player.x));
+      player.tilt += (steer * 0.14 - player.tilt) * Math.min(1, dt * 14);
+
+      // Cuộn mặt đường
+      roadOffset = (roadOffset + currentSpeed * dt) % 60;
+
+      // Khói pô / lửa Nitro
+      if (Math.random() < (isBoosting ? 0.95 : 0.35)) {
+        addExhaustParticle(player.x + 12, player.y + player.h, isBoosting);
+        addExhaustParticle(player.x + player.w - 12, player.y + player.h, isBoosting);
+      }
+
+      // Sinh xe địch
+      spawnEnemyTimer += dt;
+      const enemyInterval = Math.max(0.42, 1.15 - score * 0.00025);
+      if (spawnEnemyTimer >= enemyInterval) {
+        spawnEnemyTimer = 0;
+        spawnEnemy();
+      }
+
+      // Sinh xu & bình Nitro
+      spawnPickupTimer += dt;
+      if (spawnPickupTimer >= 1.35) {
+        spawnPickupTimer = 0;
+        spawnPickup();
+      }
+
+      // Cập nhật xe địch
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        e.y += (currentSpeed - e.speedOffset) * dt;
+
+        if (checkCollision(player, e, 6)) {
+          gameOver();
+          return;
+        }
+
+        if (e.y > H + 100) {
+          enemies.splice(i, 1);
+        }
+      }
+
+      // Cập nhật vật phẩm
+      for (let i = pickups.length - 1; i >= 0; i--) {
+        const p = pickups[i];
+        p.y += currentSpeed * 0.85 * dt;
+        p.pulse += dt * 6;
+
+        if (checkCollision(player, p, 2)) {
+          if (p.type === "COIN") {
+            score += 50;
+            playTone(880, "sine", 0.12, 0.09);
+          } else {
+            score += 100;
+            player.nitro = Math.min(100, player.nitro + 45);
+            playTone(620, "square", 0.18, 0.08);
+          }
+          pickups.splice(i, 1);
+          continue;
+        }
+
+        if (p.y > H + 50) {
+          pickups.splice(i, 1);
+        }
+      }
+    }
+
+    function gameOver() {
+      gameState = "GAMEOVER";
+      shakeTime = 0.4;
+      addExplosion(player.x + player.w / 2, player.y + player.h / 2);
+      playTone(130, "sawtooth", 0.45, 0.14);
+
+      const finalScore = Math.floor(score);
+      if (finalScore > highScore) {
+        highScore = finalScore;
+        localStorage.setItem("turbo_neon_highscore", highScore);
+        highScoreEl.textContent = highScore;
+      }
+
+      setTimeout(() => {
+        overlayTitle.textContent = "VA CHẠM RỒI!";
+        overlayDesc.innerHTML = `Điểm của bạn: <b style="color:#38bdf8;font-size:20px;">${finalScore}</b><br>Kỷ lục cao nhất: <b style="color:#facc15;">${highScore}</b>`;
+        startBtn.textContent = "CHƠI LẠI NGAY";
+        overlay.classList.remove("hidden");
+      }, 450);
+    }
+
+    function drawCar(x, y, w, h, bodyColor, roofColor, isPlayer = false, tilt = 0) {
+      ctx.save();
+      ctx.translate(x + w / 2, y + h / 2);
+      ctx.rotate(tilt);
+      ctx.translate(-w / 2, -h / 2);
+
+      // Bóng xe
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.beginPath();
+      ctx.roundRect(3, 6, w, h, 10);
+      ctx.fill();
+
+      // 4 bánh xe
+      ctx.fillStyle = "#090d16";
+      ctx.fillRect(-3, 12, 5, 16);
+      ctx.fillRect(w - 2, 12, 5, 16);
+      ctx.fillRect(-3, h - 28, 5, 16);
+      ctx.fillRect(w - 2, h - 28, 5, 16);
+
+      // Thân xe
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, w, h, 10);
+      ctx.fill();
+
+      // Kính chắn gió & mui xe
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.roundRect(6, 16, w - 12, h - 34, 6);
+      ctx.fill();
+
+      ctx.fillStyle = roofColor;
+      ctx.beginPath();
+      ctx.roundRect(8, 26, w - 16, h - 48, 4);
+      ctx.fill();
+
+      // Đèn pha / đèn hậu
+      if (isPlayer) {
+        // Đèn pha chiếu sáng phía trước
+        ctx.fillStyle = "#fef08a";
+        ctx.fillRect(6, 2, 8, 4);
+        ctx.fillRect(w - 14, 2, 8, 4);
+
+        const grad = ctx.createLinearGradient(0, 0, 0, -75);
+        grad.addColorStop(0, "rgba(254, 240, 138, 0.32)");
+        grad.addColorStop(1, "rgba(254, 240, 138, 0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(4, 2);
+        ctx.lineTo(-14, -75);
+        ctx.lineTo(w + 14, -75);
+        ctx.lineTo(w - 4, 2);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        // Đèn hậu đỏ cho xe phía trước
+        ctx.fillStyle = "#fca5a5";
+        ctx.fillRect(6, h - 4, 8, 3);
+        ctx.fillRect(w - 14, h - 4, 8, 3);
+      }
+
+      ctx.restore();
+    }
+
+    function render() {
+      ctx.save();
+      if (shakeTime > 0) {
+        const mag = shakeTime * 18;
+        ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+      }
+
+      // Nền cỏ/lề đường hai bên
+      ctx.fillStyle = "#0b1324";
+      ctx.fillRect(0, 0, W, H);
+
+      // Mặt đường nhựa
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(ROAD_LEFT, 0, ROAD_WIDTH, H);
+
+      // Vạch kẻ biên đường trắng - đỏ kiểu đường đua
+      for (let y = -60 + roadOffset; y < H; y += 60) {
+        ctx.fillStyle = "#ef4444";
+        ctx.fillRect(ROAD_LEFT - 8, y, 8, 30);
+        ctx.fillRect(ROAD_RIGHT, y, 8, 30);
+
+        ctx.fillStyle = "#f8fafc";
+        ctx.fillRect(ROAD_LEFT - 8, y + 30, 8, 30);
+        ctx.fillRect(ROAD_RIGHT, y + 30, 8, 30);
+      }
+
+      // Vạch phân làn đường đứt khúc
+      ctx.strokeStyle = "rgba(226, 232, 240, 0.32)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([28, 32]);
+      ctx.lineDashOffset = -roadOffset;
+      for (let i = 1; i < LANES; i++) {
+        const lx = ROAD_LEFT + i * LANE_WIDTH;
+        ctx.beginPath();
+        ctx.moveTo(lx, 0);
+        ctx.lineTo(lx, H);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // Vẽ vật phẩm
+      for (const p of pickups) {
+        const scale = 1 + Math.sin(p.pulse) * 0.1;
+        ctx.save();
+        ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+        ctx.scale(scale, scale);
+
+        if (p.type === "COIN") {
+          ctx.fillStyle = "#facc15";
+          ctx.beginPath();
+          ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#fef08a";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = "#854d0e";
+          ctx.font = "bold 13px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("$", 0, 1);
+        } else {
+          ctx.fillStyle = "#38bdf8";
+          ctx.beginPath();
+          ctx.roundRect(-p.w / 2, -p.h / 2, p.w, p.h, 6);
+          ctx.fill();
+          ctx.fillStyle = "#0f172a";
+          ctx.font = "bold 14px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("⚡", 0, 1);
+        }
+        ctx.restore();
+      }
+
+      // Vẽ hạt khói/lửa
+      for (const pt of particles) {
+        ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Vẽ xe địch
+      for (const e of enemies) {
+        drawCar(e.x, e.y, e.w, e.h, e.color.body, e.color.roof, false, 0);
+      }
+
+      // Vẽ xe người chơi
+      if (gameState !== "GAMEOVER") {
+        drawCar(player.x, player.y, player.w, player.h, "#38bdf8", "#0369a1", true, player.tilt);
+      }
+
+      ctx.restore();
+    }
+
+    let lastTime = performance.now();
+    function gameLoop(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      update(dt);
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
