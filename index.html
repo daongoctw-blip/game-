@@ -357,4 +357,616 @@
         orbDamage: 18,
         orbAngle: 0,
         orbSize: 11,
-        // Thông số
+        // Thông số Đạn bắn tự động
+        bulletCount: 1,
+        bulletDamage: 16,
+        shootCooldown: 0.75
+      };
+
+      updateHud();
+      gameState = "PLAYING";
+      startModal.classList.add("hidden");
+      levelUpModal.classList.add("hidden");
+      playSound(520, "triangle", 0.15, 0.08);
+    }
+
+    startBtn.addEventListener("click", resetGame);
+
+    function updateHud() {
+      const pct = Math.min(100, (player.xp / player.nextXp) * 100);
+      xpFill.style.width = `${pct}%`;
+      xpText.textContent = `CẤP ${player.level} — ${player.xp} / ${player.nextXp} XP`;
+      killsEl.textContent = kills;
+      orbCountEl.textContent = player.orbCount;
+
+      const mins = String(Math.floor(elapsedTime / 60)).padStart(2, "0");
+      const secs = String(Math.floor(elapsedTime % 60)).padStart(2, "0");
+      timeEl.textContent = `${mins}:${secs}`;
+    }
+
+    // Danh sách thẻ nâng cấp khi lên cấp
+    const UPGRADE_POOL = [
+      {
+        id: "add_orb",
+        tag: "VÒNG BẢO VỆ",
+        icon: "🛡️",
+        title: "+1 Cầu Lửa Bảo Vệ",
+        desc: "Triệu hồi thêm 1 quả cầu năng lượng xoay quanh nhân vật, thiêu đốt quái chạm phải.",
+        apply: () => { player.orbCount += 1; player.orbDamage += 4; }
+      },
+      {
+        id: "orb_power",
+        tag: "VÒNG BẢO VỆ",
+        icon: "🔥",
+        title: "Cường Hóa Vòng Bảo Vệ",
+        desc: "Tăng +35% sát thương vòng bảo vệ và tăng tốc độ xoay của các quả cầu.",
+        apply: () => { player.orbDamage = Math.round(player.orbDamage * 1.35); player.orbSpeed += 0.85; }
+      },
+      {
+        id: "orb_radius",
+        tag: "VÒNG BẢO VỆ",
+        icon: "🌀",
+        title: "Mở Rộng Vòng Bảo Vệ",
+        desc: "Tăng bán kính vòng xoay thêm +22px và kích thước cầu lửa lớn hơn.",
+        apply: () => { player.orbRadius += 22; player.orbSize += 2; }
+      },
+      {
+        id: "multi_shot",
+        tag: "VŨ KHÍ PHÉP",
+        icon: "⚡",
+        title: "+1 Tia Đạn Phép",
+        desc: "Bắn thêm 1 tia sét phép thuật tự động truy tìm quái vật gần nhất.",
+        apply: () => { player.bulletCount += 1; }
+      },
+      {
+        id: "rapid_fire",
+        tag: "VŨ KHÍ PHÉP",
+        icon: "🏹",
+        title: "Tốc Độ Bắn & Sát Thương",
+        desc: "Giảm 20% thời gian hồi chiêu bắn và tăng +6 sát thương đạn phép.",
+        apply: () => { player.shootCooldown = Math.max(0.2, player.shootCooldown * 0.8); player.bulletDamage += 6; }
+      },
+      {
+        id: "heal_max",
+        tag: "SINH TỒN",
+        icon: "❤️",
+        title: "Hồi Phục & Tăng Máu Tối Đa",
+        desc: "Tăng +30 Máu tối đa và hồi phục ngay 50% lượng máu đã mất.",
+        apply: () => {
+          player.maxHp += 30;
+          player.hp = Math.min(player.maxHp, player.hp + Math.round(player.maxHp * 0.5));
+        }
+      },
+      {
+        id: "magnet_speed",
+        tag: "HỖ TRỢ",
+        icon: "🧲",
+        title: "Nam Châm & Tốc Chạy",
+        desc: "Tăng +45% tầm hút ngọc kinh nghiệm và +15% tốc độ di chuyển.",
+        apply: () => { player.pickupRange += 35; player.speed = Math.round(player.speed * 1.15); }
+      }
+    ];
+
+    function triggerLevelUp() {
+      gameState = "LEVELUP";
+      joystick.active = false;
+      joystick.dx = 0;
+      joystick.dy = 0;
+      playSound(660, "triangle", 0.25, 0.1);
+
+      // Lấy ngẫu nhiên 3 thẻ nâng cấp
+      const shuffled = [...UPGRADE_POOL].sort(() => Math.random() - 0.5);
+      const choices = shuffled.slice(0, 3);
+
+      cardsContainer.innerHTML = "";
+      choices.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "upgrade-card";
+        card.innerHTML = `
+          <div class="card-icon">${item.icon}</div>
+          <div class="card-info">
+            <div class="card-tag">${item.tag}</div>
+            <h3>${item.title}</h3>
+            <p>${item.desc}</p>
+          </div>
+        `;
+        card.addEventListener("click", () => {
+          item.apply();
+          updateHud();
+          levelUpModal.classList.add("hidden");
+          gameState = "PLAYING";
+          playSound(880, "sine", 0.15, 0.08);
+        });
+        cardsContainer.appendChild(card);
+      });
+
+      levelUpModal.classList.remove("hidden");
+    }
+
+    function addFloatText(x, y, text, color = "#fff") {
+      floatTexts.push({ x, y, text, color, life: 0.65 });
+    }
+
+    function addParticles(x, y, color, count = 8) {
+      for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 40 + Math.random() * 120;
+        particles.push({
+          x, y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          life: 0.35,
+          color,
+          size: 3 + Math.random() * 3
+        });
+      }
+    }
+
+    function spawnEnemy() {
+      const margin = 45;
+      const side = Math.floor(Math.random() * 4);
+      let ex = player.x;
+      let ey = player.y;
+      const halfW = W / 2 + margin;
+      const halfH = H / 2 + margin;
+
+      if (side === 0) { ex += (Math.random() - 0.5) * W; ey -= halfH; }
+      else if (side === 1) { ex += (Math.random() - 0.5) * W; ey += halfH; }
+      else if (side === 2) { ex -= halfW; ey += (Math.random() - 0.5) * H; }
+      else { ex += halfW; ey += (Math.random() - 0.5) * H; }
+
+      const difficulty = 1 + elapsedTime / 45;
+      const roll = Math.random();
+
+      if (elapsedTime > 25 && roll < 0.12) {
+        // Quái khổng lồ (Tank)
+        enemies.push({
+          x: ex, y: ey,
+          r: 24,
+          hp: Math.round(90 * difficulty),
+          maxHp: Math.round(90 * difficulty),
+          speed: 58 + Math.min(35, elapsedTime * 0.2),
+          damage: 24,
+          color: "#a855f7",
+          xpValue: 12,
+          hitFlash: 0,
+          orbHitCooldown: 0
+        });
+      } else if (elapsedTime > 12 && roll < 0.32) {
+        // Quái chạy nhanh
+        enemies.push({
+          x: ex, y: ey,
+          r: 13,
+          hp: Math.round(22 * difficulty),
+          maxHp: Math.round(22 * difficulty),
+          speed: 122 + Math.min(55, elapsedTime * 0.3),
+          damage: 12,
+          color: "#f97316",
+          xpValue: 5,
+          hitFlash: 0,
+          orbHitCooldown: 0
+        });
+      } else {
+        // Quái thường
+        enemies.push({
+          x: ex, y: ey,
+          r: 16,
+          hp: Math.round(32 * difficulty),
+          maxHp: Math.round(32 * difficulty),
+          speed: 82 + Math.min(45, elapsedTime * 0.25),
+          damage: 15,
+          color: "#ef4444",
+          xpValue: 4,
+          hitFlash: 0,
+          orbHitCooldown: 0
+        });
+      }
+    }
+
+    function shootNearestEnemies() {
+      if (enemies.length === 0) return;
+      // Sắp xếp quái theo khoảng cách gần nhất
+      const sorted = [...enemies].sort((a, b) => {
+        const da = Math.hypot(a.x - player.x, a.y - player.y);
+        const db = Math.hypot(b.x - player.x, b.y - player.y);
+        return da - db;
+      });
+
+      for (let i = 0; i < player.bulletCount; i++) {
+        const target = sorted[i % sorted.length];
+        const ang = Math.atan2(target.y - player.y, target.x - player.x);
+        const spd = 430;
+        bullets.push({
+          x: player.x,
+          y: player.y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          r: 6,
+          damage: player.bulletDamage,
+          life: 1.4
+        });
+      }
+      playSound(420, "sine", 0.05, 0.03);
+    }
+
+    function damageEnemy(enemy, dmg, knockX = 0, knockY = 0) {
+      enemy.hp -= dmg;
+      enemy.hitFlash = 0.08;
+      enemy.x += knockX;
+      enemy.y += knockY;
+      addFloatText(enemy.x, enemy.y - enemy.r, `-${dmg}`, "#fef08a");
+
+      if (enemy.hp <= 0) {
+        kills += 1;
+        addParticles(enemy.x, enemy.y, enemy.color, 10);
+        gems.push({
+          x: enemy.x,
+          y: enemy.y,
+          r: enemy.xpValue >= 10 ? 8 : 6,
+          value: enemy.xpValue,
+          color: enemy.xpValue >= 10 ? "#c084fc" : "#38bdf8"
+        });
+        playSound(240, "triangle", 0.06, 0.04);
+        return true;
+      }
+      return false;
+    }
+
+    function update(dt) {
+      if (gameState !== "PLAYING") return;
+
+      elapsedTime += dt;
+
+      // Di chuyển người chơi
+      let mx = joystick.dx;
+      let my = joystick.dy;
+
+      if (!joystick.active) {
+        if (keys["a"] || keys["arrowleft"]) mx -= 1;
+        if (keys["d"] || keys["arrowright"]) mx += 1;
+        if (keys["w"] || keys["arrowup"]) my -= 1;
+        if (keys["s"] || keys["arrowdown"]) my += 1;
+        const len = Math.hypot(mx, my);
+        if (len > 0) {
+          mx /= len;
+          my /= len;
+        }
+      }
+
+      player.x += mx * player.speed * dt;
+      player.y += my * player.speed * dt;
+
+      // Xoay Vòng Bảo Vệ
+      player.orbAngle += player.orbSpeed * dt;
+
+      // Sinh quái theo thời gian
+      spawnTimer += dt;
+      const spawnInterval = Math.max(0.22, 1.05 - elapsedTime * 0.008);
+      if (spawnTimer >= spawnInterval) {
+        spawnTimer = 0;
+        spawnEnemy();
+      }
+
+      // Bắn đạn phép tự động
+      shootTimer += dt;
+      if (shootTimer >= player.shootCooldown) {
+        shootTimer = 0;
+        shootNearestEnemies();
+      }
+
+      // Cập nhật đạn
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.life -= dt;
+
+        let hit = false;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          const dist = Math.hypot(b.x - e.x, b.y - e.y);
+          if (dist < b.r + e.r) {
+            const ang = Math.atan2(e.y - b.y, e.x - b.x);
+            const dead = damageEnemy(e, b.damage, Math.cos(ang) * 8, Math.sin(ang) * 8);
+            if (dead) enemies.splice(j, 1);
+            hit = true;
+            break;
+          }
+        }
+
+        if (hit || b.life <= 0) {
+          bullets.splice(i, 1);
+        }
+      }
+
+      // Tính tọa độ các quả cầu của Vòng Bảo Vệ
+      const orbs = [];
+      for (let i = 0; i < player.orbCount; i++) {
+        const a = player.orbAngle + (i * Math.PI * 2) / player.orbCount;
+        orbs.push({
+          x: player.x + Math.cos(a) * player.orbRadius,
+          y: player.y + Math.sin(a) * player.orbRadius,
+          r: player.orbSize
+        });
+      }
+
+      // Cập nhật quái vật
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        if (e.hitFlash > 0) e.hitFlash -= dt;
+        if (e.orbHitCooldown > 0) e.orbHitCooldown -= dt;
+
+        const ang = Math.atan2(player.y - e.y, player.x - e.x);
+        e.x += Math.cos(ang) * e.speed * dt;
+        e.y += Math.sin(ang) * e.speed * dt;
+
+        // Kiểm tra va chạm với Vòng Bảo Vệ
+        let diedByOrb = false;
+        if (e.orbHitCooldown <= 0) {
+          for (const orb of orbs) {
+            if (Math.hypot(orb.x - e.x, orb.y - e.y) < orb.r + e.r) {
+              e.orbHitCooldown = 0.28;
+              const pushAng = Math.atan2(e.y - player.y, e.x - player.x);
+              const dead = damageEnemy(e, player.orbDamage, Math.cos(pushAng) * 18, Math.sin(pushAng) * 18);
+              addParticles(orb.x, orb.y, "#38bdf8", 4);
+              if (dead) {
+                enemies.splice(i, 1);
+                diedByOrb = true;
+              }
+              break;
+            }
+          }
+        }
+        if (diedByOrb) continue;
+
+        // Kiểm tra quái chạm người chơi
+        const distToPlayer = Math.hypot(player.x - e.x, player.y - e.y);
+        if (distToPlayer < player.r + e.r) {
+          player.hp -= e.damage * dt * 2.2;
+          if (player.hp <= 0) {
+            player.hp = 0;
+            gameOver();
+            return;
+          }
+        }
+      }
+
+      // Cập nhật ngọc kinh nghiệm (XP)
+      for (let i = gems.length - 1; i >= 0; i--) {
+        const g = gems[i];
+        const dist = Math.hypot(player.x - g.x, player.y - g.y);
+
+        // Hút ngọc khi vào tầm
+        if (dist < player.pickupRange) {
+          const ang = Math.atan2(player.y - g.y, player.x - g.x);
+          g.x += Math.cos(ang) * 340 * dt;
+          g.y += Math.sin(ang) * 340 * dt;
+        }
+
+        if (dist < player.r + g.r + 4) {
+          player.xp += g.value;
+          gems.splice(i, 1);
+          playSound(740, "sine", 0.05, 0.03);
+
+          if (player.xp >= player.nextXp) {
+            player.xp -= player.nextXp;
+            player.level += 1;
+            player.nextXp = Math.round(player.nextXp * 1.38 + 8);
+            updateHud();
+            triggerLevelUp();
+            return;
+          }
+        }
+      }
+
+      // Cập nhật chữ sát thương & hạt hiệu ứng
+      for (let i = floatTexts.length - 1; i >= 0; i--) {
+        const ft = floatTexts[i];
+        ft.y -= 35 * dt;
+        ft.life -= dt;
+        if (ft.life <= 0) floatTexts.splice(i, 1);
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      updateHud();
+    }
+
+    function gameOver() {
+      gameState = "GAMEOVER";
+      playSound(120, "sawtooth", 0.5, 0.12);
+      const mins = String(Math.floor(elapsedTime / 60)).padStart(2, "0");
+      const secs = String(Math.floor(elapsedTime % 60)).padStart(2, "0");
+
+      startTitle.textContent = "BẠN ĐÃ GỤC NGÃ!";
+      startDesc.innerHTML = `
+        Thời gian sinh tồn: <b style="color:#38bdf8;font-size:18px;">${mins}:${secs}</b><br>
+        Cấp độ đạt được: <b style="color:#facc15;">Cấp ${player.level}</b> &nbsp;|&nbsp; Quái hạ gục: <b style="color:#f43f5e;">${kills}</b>
+      `;
+      startBtn.textContent = "CHƠI LẠI";
+      startModal.classList.remove("hidden");
+    }
+
+    function render() {
+      ctx.fillStyle = "#0b1120";
+      ctx.fillRect(0, 0, W, H);
+
+      // Camera bám theo nhân vật ở giữa màn hình
+      const camX = W / 2 - (player.x || 0);
+      const camY = H / 2 - (player.y || 0);
+
+      ctx.save();
+      ctx.translate(camX, camY);
+
+      // Vẽ lưới nền bản đồ vô tận
+      const gridSize = 64;
+      const startX = Math.floor(((player.x || 0) - W / 2) / gridSize) * gridSize;
+      const endX = startX + W + gridSize * 2;
+      const startY = Math.floor(((player.y || 0) - H / 2) / gridSize) * gridSize;
+      const endY = startY + H + gridSize * 2;
+
+      ctx.strokeStyle = "rgba(51, 65, 85, 0.35)";
+      ctx.lineWidth = 1;
+      for (let gx = startX; gx <= endX; gx += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(gx, startY);
+        ctx.lineTo(gx, endY);
+        ctx.stroke();
+      }
+      for (let gy = startY; gy <= endY; gy += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(startX, gy);
+        ctx.lineTo(endX, gy);
+        ctx.stroke();
+      }
+
+      if (gameState !== "MENU") {
+        // Vẽ ngọc XP
+        for (const g of gems) {
+          ctx.fillStyle = g.color;
+          ctx.beginPath();
+          ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(g.x - 2, g.y - 2, g.r * 0.35, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Vẽ vòng quỹ đạo mờ của Vòng Bảo Vệ
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.2)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.orbRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Vẽ các quả cầu Vòng Bảo Vệ
+        for (let i = 0; i < player.orbCount; i++) {
+          const a = player.orbAngle + (i * Math.PI * 2) / player.orbCount;
+          const ox = player.x + Math.cos(a) * player.orbRadius;
+          const oy = player.y + Math.sin(a) * player.orbRadius;
+
+          // Hào quang phát sáng
+          const grad = ctx.createRadialGradient(ox, oy, 2, ox, oy, player.orbSize * 2.1);
+          grad.addColorStop(0, "rgba(56, 189, 248, 0.9)");
+          grad.addColorStop(1, "rgba(56, 189, 248, 0)");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(ox, oy, player.orbSize * 2.1, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#e0f2fe";
+          ctx.beginPath();
+          ctx.arc(ox, oy, player.orbSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Vẽ đạn phép
+        for (const b of bullets) {
+          ctx.fillStyle = "#facc15";
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Vẽ quái vật
+        for (const e of enemies) {
+          ctx.fillStyle = e.hitFlash > 0 ? "#ffffff" : e.color;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Mắt quái
+          ctx.fillStyle = "#090d16";
+          ctx.beginPath();
+          ctx.arc(e.x - e.r * 0.32, e.y - e.r * 0.15, e.r * 0.18, 0, Math.PI * 2);
+          ctx.arc(e.x + e.r * 0.32, e.y - e.r * 0.15, e.r * 0.18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Vẽ nhân vật
+        ctx.fillStyle = "#38bdf8";
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#f8fafc";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Thanh máu ngay dưới chân nhân vật
+        const hpW = 44;
+        const hpH = 6;
+        const hpX = player.x - hpW / 2;
+        const hpY = player.y + player.r + 10;
+        ctx.fillStyle = "#1e293b";
+        ctx.fillRect(hpX, hpY, hpW, hpH);
+        ctx.fillStyle = player.hp > player.maxHp * 0.35 ? "#22c55e" : "#ef4444";
+        ctx.fillRect(hpX, hpY, hpW * (player.hp / player.maxHp), hpH);
+
+        // Vẽ hạt hiệu ứng & chữ sát thương
+        for (const p of particles) {
+          ctx.globalAlpha = Math.max(0, p.life / 0.35);
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.font = "bold 13px sans-serif";
+        ctx.textAlign = "center";
+        for (const ft of floatTexts) {
+          ctx.globalAlpha = Math.max(0, ft.life / 0.65);
+          ctx.fillStyle = ft.color;
+          ctx.fillText(ft.text, ft.x, ft.y);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+
+      // Vẽ Joystick ảo trên điện thoại khi chạm kéo
+      if (joystick.active) {
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(joystick.startX, joystick.startY, 44, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const maxKnob = 34;
+        const rawDx = joystick.currX - joystick.startX;
+        const rawDy = joystick.currY - joystick.startY;
+        const rawDist = Math.hypot(rawDx, rawDy);
+        const clampDist = Math.min(maxKnob, rawDist);
+        const ang = Math.atan2(rawDy, rawDx);
+        const kx = joystick.startX + Math.cos(ang) * clampDist;
+        const ky = joystick.startY + Math.sin(ang) * clampDist;
+
+        ctx.fillStyle = "rgba(56, 189, 248, 0.65)";
+        ctx.beginPath();
+        ctx.arc(kx, ky, 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    let lastTime = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
