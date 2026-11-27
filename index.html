@@ -12,8 +12,8 @@
     .xp-bar-wrap { width: 100%; height: 14px; background: rgba(15, 23, 42, 0.85); border: 1px solid #334155; border-radius: 999px; overflow: hidden; position: relative; }
     .xp-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #06b6d4, #3b82f6, #8b5cf6); transition: width 0.12s ease-out; }
     .xp-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 1px 2px #000; }
-    .stats-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    .pill { background: rgba(15, 23, 42, 0.82); border: 1px solid rgba(148, 163, 184, 0.28); padding: 6px 12px; border-radius: 10px; font-size: 13px; font-weight: 700; backdrop-filter: blur(4px); }
+    .stats-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; }
+    .pill { background: rgba(15, 23, 42, 0.82); border: 1px solid rgba(148, 163, 184, 0.28); padding: 5px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; backdrop-filter: blur(4px); }
     .pill span { color: #38bdf8; }
     .modal-overlay { position: fixed; inset: 0; background: rgba(5, 9, 18, 0.88); backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
     .modal-overlay.hidden { display: none; }
@@ -38,8 +38,10 @@
     </div>
     <div class="stats-row">
       <div class="pill">⏱️ <span id="timeEl">00:00</span></div>
-      <div class="pill">💀 Ha guc: <span id="killsEl">0</span></div>
-      <div class="pill">🛡️ Vong bao ve: <span id="orbCountEl">1</span></div>
+      <div class="pill">❤️ <span id="hpEl">260/260</span></div>
+      <div class="pill">🛡️ Khien: <span id="shieldEl">120</span></div>
+      <div class="pill">📦 Ruong: <span id="chestTimerEl">60s</span></div>
+      <div class="pill">💀 <span id="killsEl">0</span></div>
     </div>
   </div>
 
@@ -48,7 +50,7 @@
   <div class="modal-overlay" id="startModal">
     <div class="modal-title" id="startTitle">ARCANE SURVIVOR</div>
     <div class="modal-sub" id="startDesc">
-      Dieu khien phap su chien dau voi quai vat, nhat ngoc kinh nghiem de len cap va trieu hoi <b>Vong Bao Ve</b>.<br><br>
+      Dieu khien phap su chien dau voi quai vat, nhat ngoc kinh nghiem de len cap va kich hoat <b>Vong Bao Ve, Set, Cau Lua, Phi Tieu, Khien Giap</b>.<br><br>
       📱 <b>Dien thoai:</b> Cham &amp; keo ngon tay bat ky dau de chay<br>
       💻 <b>May tinh:</b> Dung phim <b>WASD</b> hoac <b>Mui ten</b>
     </div>
@@ -68,8 +70,10 @@
     const xpFill = document.getElementById("xpFill");
     const xpText = document.getElementById("xpText");
     const timeEl = document.getElementById("timeEl");
+    const hpEl = document.getElementById("hpEl");
+    const shieldEl = document.getElementById("shieldEl");
+    const chestTimerEl = document.getElementById("chestTimerEl");
     const killsEl = document.getElementById("killsEl");
-    const orbCountEl = document.getElementById("orbCountEl");
     const startModal = document.getElementById("startModal");
     const startTitle = document.getElementById("startTitle");
     const startDesc = document.getElementById("startDesc");
@@ -84,6 +88,78 @@
       H = canvas.height = window.innerHeight;
     });
 
+    // ========================================================================
+    // 1. TAI SPRITE TU GITHUB REPO & TACH NEN TRANG TREN CANVAS
+    // ========================================================================
+    const SPRITE_FILES = {
+      hero: "hero.png",
+      dwarf: "nguoi-lun.png",
+      mob: "quai.png",
+      mob1: "quai1.png",
+      wolf: "soi.png"
+    };
+
+    const sprites = {};
+
+    function removeWhiteBackground(img) {
+      const off = document.createElement("canvas");
+      off.width = img.naturalWidth || img.width || 64;
+      off.height = img.naturalHeight || img.height || 64;
+      const octx = off.getContext("2d");
+      octx.drawImage(img, 0, 0);
+
+      try {
+        const imageData = octx.getImageData(0, 0, off.width, off.height);
+        const px = imageData.data;
+        for (let i = 0; i < px.length; i += 4) {
+          const r = px[i], g = px[i + 1], b = px[i + 2];
+          if (r > 238 && g > 238 && b > 238) {
+            px[i + 3] = 0;
+          }
+        }
+        octx.putImageData(imageData, 0, 0);
+      } catch (err) {
+        // Nếu mở local file:// bị chặn CORS getImageData thì vẫn trả về ảnh gốc
+      }
+      return off;
+    }
+
+    function loadSprites() {
+      Object.entries(SPRITE_FILES).forEach(([key, fileName]) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          sprites[key] = removeWhiteBackground(img);
+        };
+        img.onerror = () => {
+          sprites[key] = null;
+        };
+        img.src = fileName;
+      });
+    }
+    loadSprites();
+
+    function drawSprite(key, x, y, size, flipX = false, flash = false) {
+      const sp = sprites[key];
+      if (!sp) return false;
+
+      ctx.save();
+      ctx.translate(x, y);
+      if (flipX) ctx.scale(-1, 1);
+      ctx.drawImage(sp, -size / 2, -size / 2, size, size);
+
+      if (flash) {
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+        ctx.fillRect(-size / 2, -size / 2, size, size);
+      }
+      ctx.restore();
+      return true;
+    }
+
+    // ========================================================================
+    // 2. AM THANH & DIEU KHIEN
+    // ========================================================================
     let audioCtx = null;
     function playSound(freq, type = "sine", dur = 0.08, vol = 0.05) {
       try {
@@ -146,12 +222,16 @@
     canvas.addEventListener("touchend", endTouch);
     canvas.addEventListener("touchcancel", endTouch);
 
+    // ========================================================================
+    // 3. TRANG THAI GAME, HIEU UNG THANG CAP & HE THONG KY NANG
+    // ========================================================================
     let gameState = "MENU";
     let elapsedTime = 0;
     let kills = 0;
     let spawnTimer = 0;
     let shootTimer = 0;
     let walkPhase = 0;
+    let enemyIdCounter = 1;
 
     let player = {};
     let enemies = [];
@@ -160,27 +240,130 @@
     let floatTexts = [];
     let particles = [];
 
+    // Hiệu ứng đẹp mỗi khi thăng cấp
+    const levelUpFX = {
+      activeTimer: 0,
+      maxDuration: 1.2,
+      rings: [],
+      sparks: []
+    };
+
+    // Hệ thống kỹ năng: Vòng bảo vệ + Sét + Cầu lửa + Phi tiêu + Khiên giáp + Rương báu 60s
+    const skills = {
+      shield: {
+        max: 120,
+        current: 120,
+        regenDelay: 3.0,
+        regenTimer: 0,
+        regenRate: 20
+      },
+      lightning: {
+        enabled: true,
+        cooldown: 2.1,
+        timer: 0.6,
+        range: 290,
+        chains: 3,
+        damage: 34,
+        bolts: []
+      },
+      fireball: {
+        enabled: true,
+        cooldown: 1.55,
+        timer: 0.4,
+        speed: 410,
+        damage: 36,
+        aoeRadius: 68,
+        projectiles: [],
+        explosions: []
+      },
+      shuriken: {
+        enabled: true,
+        cooldown: 0.85,
+        timer: 0.2,
+        speed: 490,
+        damage: 20,
+        count: 1,
+        projectiles: []
+      },
+      chest: {
+        interval: 60,
+        timer: 0,
+        pickupRadius: 42,
+        items: []
+      }
+    };
+
+    function spawnLevelUpEffect(x, y, lvl) {
+      levelUpFX.activeTimer = levelUpFX.maxDuration;
+      levelUpFX.rings.push(
+        { x, y, radius: 14, maxRadius: 130, alpha: 0.95, color: "#facc15", width: 5 },
+        { x, y, radius: 8, maxRadius: 175, alpha: 0.8, color: "#38bdf8", width: 3 }
+      );
+      for (let i = 0; i < 36; i++) {
+        const ang = (Math.PI * 2 * i) / 36 + (Math.random() - 0.5) * 0.25;
+        const spd = 75 + Math.random() * 150;
+        const life = 0.55 + Math.random() * 0.45;
+        levelUpFX.sparks.push({
+          x, y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd - 20,
+          life, maxLife: life,
+          size: 2.5 + Math.random() * 3.5,
+          color: i % 3 === 0 ? "#fde047" : (i % 3 === 1 ? "#38bdf8" : "#e879f9")
+        });
+      }
+      addFloatText(x, y - 34, `✨ LEN CAP ${lvl}! +MAU & KHIEN`, "#fde047");
+    }
+
     function resetGame() {
       elapsedTime = 0;
       kills = 0;
       spawnTimer = 0;
       shootTimer = 0;
       walkPhase = 0;
+      enemyIdCounter = 1;
       enemies = [];
       bullets = [];
       gems = [];
       floatTexts = [];
       particles = [];
 
+      levelUpFX.activeTimer = 0;
+      levelUpFX.rings = [];
+      levelUpFX.sparks = [];
+
+      skills.shield.max = 120;
+      skills.shield.current = 120;
+      skills.shield.regenTimer = 0;
+      skills.lightning.timer = 0.6;
+      skills.lightning.damage = 34;
+      skills.lightning.chains = 3;
+      skills.lightning.bolts = [];
+      skills.fireball.timer = 0.4;
+      skills.fireball.damage = 36;
+      skills.fireball.aoeRadius = 68;
+      skills.fireball.projectiles = [];
+      skills.fireball.explosions = [];
+      skills.shuriken.timer = 0.2;
+      skills.shuriken.damage = 20;
+      skills.shuriken.count = 1;
+      skills.shuriken.projectiles = [];
+      skills.chest.timer = 0;
+      skills.chest.items = [];
+
+      // Hero máu trâu hơn, giảm sát thương nhận vào & hồi khiên giáp
       player = {
-        x: 0, y: 0, r: 18,
-        hp: 100, maxHp: 100,
-        speed: 190,
+        x: 0, y: 0, r: 22,
+        hp: 260, maxHp: 260,
+        dmgReduction: 0.25,
+        invulnTimer: 0,
+        speed: 205,
         facing: 1,
         level: 1, xp: 0, nextXp: 20,
-        pickupRange: 75,
-        orbCount: 1, orbRadius: 72, orbSpeed: 2.8, orbDamage: 18, orbAngle: 0, orbSize: 11,
-        bulletCount: 1, bulletDamage: 16, shootCooldown: 0.75
+        pickupRange: 85,
+        // Vòng trong quay quanh bảo vệ
+        orbCount: 2, orbRadius: 64, orbSpeed: 3.3, orbDamage: 22, orbAngle: 0, orbSize: 10,
+        bulletCount: 1, bulletDamage: 18, shootCooldown: 0.7
       };
 
       updateHud();
@@ -197,19 +380,22 @@
       xpFill.style.width = `${pct}%`;
       xpText.textContent = `CAP ${player.level} — ${player.xp} / ${player.nextXp} XP`;
       killsEl.textContent = kills;
-      orbCountEl.textContent = player.orbCount;
+      hpEl.textContent = `${Math.ceil(player.hp)}/${player.maxHp}`;
+      shieldEl.textContent = `${Math.ceil(skills.shield.current)}`;
+      const remainChest = Math.max(0, Math.ceil(skills.chest.interval - skills.chest.timer));
+      chestTimerEl.textContent = `${remainChest}s`;
       const mins = String(Math.floor(elapsedTime / 60)).padStart(2, "0");
       const secs = String(Math.floor(elapsedTime % 60)).padStart(2, "0");
       timeEl.textContent = `${mins}:${secs}`;
     }
 
     const UPGRADE_POOL = [
-      { id: "add_orb", tag: "VONG BAO VE", icon: "🛡️", title: "+1 Cau Lua Bao Ve", desc: "Trieu hoi them 1 qua cau nang luong xoay quanh nhan vat, thieu dot quai cham phai.", apply: () => { player.orbCount += 1; player.orbDamage += 4; } },
-      { id: "orb_power", tag: "VONG BAO VE", icon: "🔥", title: "Cuong Hoa Vong Bao Ve", desc: "Tang +35% sat thuong vong bao ve va tang toc do xoay cua cac qua cau.", apply: () => { player.orbDamage = Math.round(player.orbDamage * 1.35); player.orbSpeed += 0.85; } },
-      { id: "orb_radius", tag: "VONG BAO VE", icon: "🌀", title: "Mo Rong Vong Bao Ve", desc: "Tang ban kinh vong xoay them +22px va kich thuoc cau lua lon hon.", apply: () => { player.orbRadius += 22; player.orbSize += 2; } },
-      { id: "multi_shot", tag: "VU KHI PHEP", icon: "⚡", title: "+1 Tia Dan Phep", desc: "Ban them 1 tia set phep thuat tu dong truy tim quai vat gan nhat.", apply: () => { player.bulletCount += 1; } },
-      { id: "rapid_fire", tag: "VU KHI PHEP", icon: "🏹", title: "Toc Do Ban & Sat Thuong", desc: "Giam 20% thoi gian hoi chieu ban va tang +6 sat thuong dan phep.", apply: () => { player.shootCooldown = Math.max(0.2, player.shootCooldown * 0.8); player.bulletDamage += 6; } },
-      { id: "heal_max", tag: "SINH TON", icon: "❤️", title: "Hoi Phuc & Tang Mau Toi Da", desc: "Tang +30 Mau toi da va hoi phuc ngay 50% luong mau da mat.", apply: () => { player.maxHp += 30; player.hp = Math.min(player.maxHp, player.hp + Math.round(player.maxHp * 0.5)); } },
+      { id: "add_orb", tag: "VONG BAO VE", icon: "🛡️", title: "+1 Vong Bao Ve Quay Quanh", desc: "Them 1 ngoc nang luong quay quanh hero, tang sat thuong va chong quai ap sat.", apply: () => { player.orbCount += 1; player.orbDamage += 6; } },
+      { id: "orb_power", tag: "VONG BAO VE", icon: "🌀", title: "Cuong Hoa Vong Bao Ve", desc: "Tang +35% sat thuong vong xoay, tang toc do quay va mo rong ban kinh.", apply: () => { player.orbDamage = Math.round(player.orbDamage * 1.35); player.orbSpeed += 0.85; player.orbRadius += 10; } },
+      { id: "lightning_up", tag: "SET", icon: "⚡", title: "Set Danh Lan Manh Hon", desc: "Tang +14 sat thuong tia set, tang so muc tieu giat lan va giam hoi chieu.", apply: () => { skills.lightning.damage += 14; skills.lightning.chains = Math.min(6, skills.lightning.chains + 1); skills.lightning.cooldown = Math.max(1.0, skills.lightning.cooldown * 0.88); } },
+      { id: "fireball_up", tag: "CAU LUA", icon: "🔥", title: "Cau Lua No Lon Hon", desc: "Tang +15 sat thuong cau lua va mo rong ban kinh vu no AoE (+16px).", apply: () => { skills.fireball.damage += 15; skills.fireball.aoeRadius += 16; skills.fireball.cooldown = Math.max(0.75, skills.fireball.cooldown * 0.9); } },
+      { id: "shuriken_up", tag: "PHI TIEU", icon: "✳️", title: "Phi Tieu Lien Thanh", desc: "Tang +10 sat thuong phi tieu, ban nhanh hon va them tia phi tieu.", apply: () => { skills.shuriken.damage += 10; skills.shuriken.count = Math.min(4, skills.shuriken.count + 1); skills.shuriken.cooldown = Math.max(0.35, skills.shuriken.cooldown * 0.86); } },
+      { id: "shield_heal", tag: "KHIEN & MAU", icon: "💚", title: "Sieu Mau & Cuong Hoa Khien", desc: "Tang +55 Mau toi da, +35 Khien toi da, hoi day khien & hoi 45% mau.", apply: () => { player.maxHp += 55; player.hp = Math.min(player.maxHp, player.hp + Math.round(player.maxHp * 0.45)); skills.shield.max += 35; skills.shield.current = skills.shield.max; } },
       { id: "magnet_speed", tag: "HO TRO", icon: "🧲", title: "Nam Cham & Toc Chay", desc: "Tang +45% tam hut ngoc kinh nghiem va +15% toc do di chuyen.", apply: () => { player.pickupRange += 35; player.speed = Math.round(player.speed * 1.15); } }
     ];
 
@@ -228,6 +414,7 @@
         card.innerHTML = `<div class="card-icon">${item.icon}</div><div class="card-info"><div class="card-tag">${item.tag}</div><h3>${item.title}</h3><p>${item.desc}</p></div>`;
         card.addEventListener("click", () => {
           item.apply();
+          spawnLevelUpEffect(player.x, player.y, player.level);
           updateHud();
           levelUpModal.classList.add("hidden");
           gameState = "PLAYING";
@@ -239,7 +426,7 @@
     }
 
     function addFloatText(x, y, text, color = "#fff") {
-      floatTexts.push({ x, y, text, color, life: 0.65 });
+      floatTexts.push({ x, y, text, color, life: 0.75 });
     }
 
     function addParticles(x, y, color, count = 8) {
@@ -266,12 +453,13 @@
       const difficulty = 1 + elapsedTime / 45;
       const roll = Math.random();
 
-      if (elapsedTime > 25 && roll < 0.12) {
-        enemies.push({ kind: "brute", x: ex, y: ey, r: 24, hp: Math.round(90 * difficulty), maxHp: Math.round(90 * difficulty), speed: 58 + Math.min(35, elapsedTime * 0.2), damage: 24, color: "#a855f7", xpValue: 12, hitFlash: 0, orbHitCooldown: 0 });
-      } else if (elapsedTime > 12 && roll < 0.32) {
-        enemies.push({ kind: "runner", x: ex, y: ey, r: 13, hp: Math.round(22 * difficulty), maxHp: Math.round(22 * difficulty), speed: 122 + Math.min(55, elapsedTime * 0.3), damage: 12, color: "#f97316", xpValue: 5, hitFlash: 0, orbHitCooldown: 0 });
+      if (elapsedTime > 20 && roll < 0.14) {
+        enemies.push({ id: enemyIdCounter++, kind: "brute", sprite: "dwarf", x: ex, y: ey, r: 24, hp: Math.round(95 * difficulty), maxHp: Math.round(95 * difficulty), speed: 62 + Math.min(35, elapsedTime * 0.2), damage: 22, color: "#a855f7", xpValue: 12, hitFlash: 0, orbHitCooldown: 0 });
+      } else if (elapsedTime > 10 && roll < 0.36) {
+        enemies.push({ id: enemyIdCounter++, kind: "runner", sprite: "wolf", x: ex, y: ey, r: 16, hp: Math.round(26 * difficulty), maxHp: Math.round(26 * difficulty), speed: 124 + Math.min(55, elapsedTime * 0.3), damage: 12, color: "#38bdf8", xpValue: 5, hitFlash: 0, orbHitCooldown: 0 });
       } else {
-        enemies.push({ kind: "fiend", x: ex, y: ey, r: 16, hp: Math.round(32 * difficulty), maxHp: Math.round(32 * difficulty), speed: 82 + Math.min(45, elapsedTime * 0.25), damage: 15, color: "#ef4444", xpValue: 4, hitFlash: 0, orbHitCooldown: 0 });
+        const mobKey = Math.random() < 0.5 ? "mob" : "mob1";
+        enemies.push({ id: enemyIdCounter++, kind: "fiend", sprite: mobKey, x: ex, y: ey, r: 18, hp: Math.round(35 * difficulty), maxHp: Math.round(35 * difficulty), speed: 84 + Math.min(45, elapsedTime * 0.25), damage: 14, color: "#22c55e", xpValue: 4, hitFlash: 0, orbHitCooldown: 0 });
       }
     }
 
@@ -291,7 +479,7 @@
       enemy.hitFlash = 0.08;
       enemy.x += knockX;
       enemy.y += knockY;
-      addFloatText(enemy.x, enemy.y - enemy.r, `-${dmg}`, "#fef08a");
+      addFloatText(enemy.x, enemy.y - enemy.r, `-${Math.round(dmg)}`, "#fef08a");
 
       if (enemy.hp <= 0) {
         kills += 1;
@@ -303,9 +491,279 @@
       return false;
     }
 
+    function cleanupDeadEnemies() {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        if (enemies[i].hp <= 0) {
+          enemies.splice(i, 1);
+        }
+      }
+    }
+
+    function createBoltPoints(x1, y1, x2, y2, steps = 6) {
+      const pts = [{ x: x1, y: y1 }];
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const offset = (Math.random() - 0.5) * 26;
+        pts.push({ x: x1 + dx * t + nx * offset, y: y1 + dy * t + ny * offset });
+      }
+      pts.push({ x: x2, y: y2 });
+      return pts;
+    }
+
+    function castLightningSkill() {
+      const cfg = skills.lightning;
+      if (!cfg.enabled || enemies.length === 0) return;
+
+      const sorted = [...enemies]
+        .filter((e) => e.hp > 0)
+        .sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
+
+      if (!sorted[0] || Math.hypot(sorted[0].x - player.x, sorted[0].y - player.y) > cfg.range) return;
+
+      let prevX = player.x;
+      let prevY = player.y - 12;
+      const count = Math.min(cfg.chains, sorted.length);
+      for (let i = 0; i < count; i++) {
+        const t = sorted[i];
+        if (i > 0 && Math.hypot(t.x - prevX, t.y - prevY) > cfg.range * 0.7) break;
+        cfg.bolts.push({
+          points: createBoltPoints(prevX, prevY, t.x, t.y, 6),
+          life: 0.22,
+          maxLife: 0.22,
+          color: i === 0 ? "#7dd3fc" : "#e879f9"
+        });
+        damageEnemy(t, cfg.damage);
+        prevX = t.x;
+        prevY = t.y;
+      }
+      cleanupDeadEnemies();
+      playSound(920, "sawtooth", 0.07, 0.04);
+    }
+
+    function castFireballSkill() {
+      const cfg = skills.fireball;
+      if (!cfg.enabled) return;
+      const target = [...enemies].sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))[0];
+      const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : (player.facing > 0 ? 0 : Math.PI);
+      cfg.projectiles.push({
+        x: player.x,
+        y: player.y,
+        vx: Math.cos(ang) * cfg.speed,
+        vy: Math.sin(ang) * cfg.speed,
+        life: 1.5,
+        trail: []
+      });
+    }
+
+    function castShurikenSkill() {
+      const cfg = skills.shuriken;
+      if (!cfg.enabled) return;
+      const target = [...enemies].sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))[0];
+      const baseAng = target ? Math.atan2(target.y - player.y, target.x - player.x) : (player.facing > 0 ? 0 : Math.PI);
+
+      for (let i = 0; i < cfg.count; i++) {
+        const spread = (i - (cfg.count - 1) / 2) * 0.22;
+        const ang = baseAng + spread;
+        cfg.projectiles.push({
+          x: player.x,
+          y: player.y,
+          vx: Math.cos(ang) * cfg.speed,
+          vy: Math.sin(ang) * cfg.speed,
+          rot: 0,
+          life: 1.45
+        });
+      }
+    }
+
+    function spawnTreasureChest() {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 120 + Math.random() * 260;
+      skills.chest.items.push({
+        x: player.x + Math.cos(ang) * dist,
+        y: player.y + Math.sin(ang) * dist,
+        bob: Math.random() * Math.PI * 2,
+        life: 40
+      });
+      addFloatText(player.x, player.y - 44, "📦 RUONG BAU DA ROI TREN MAP!", "#fde047");
+      playSound(587, "triangle", 0.2, 0.08);
+    }
+
+    function collectTreasureChest(chest) {
+      const roll = Math.floor(Math.random() * 4);
+      if (roll === 0) {
+        player.orbCount = Math.min(8, player.orbCount + 1);
+        player.orbDamage += 8;
+        addFloatText(chest.x, chest.y - 24, "🛡️ +1 VONG BAO VE & +8 SAT THUONG", "#38bdf8");
+      } else if (roll === 1) {
+        skills.shield.max += 35;
+        skills.shield.current = skills.shield.max;
+        player.hp = Math.min(player.maxHp, player.hp + 60);
+        addFloatText(chest.x, chest.y - 24, "💚 DAY KHIEN & +60 MAU", "#4ade80");
+      } else if (roll === 2) {
+        skills.fireball.damage += 16;
+        skills.lightning.damage += 16;
+        addFloatText(chest.x, chest.y - 24, "⚡🔥 +16 SAT THUONG SET & CAU LUA", "#fbbf24");
+      } else {
+        skills.shuriken.damage += 12;
+        skills.shuriken.count = Math.min(4, skills.shuriken.count + 1);
+        addFloatText(chest.x, chest.y - 24, "✳️ +12 SAT THUONG PHI TIEU", "#e879f9");
+      }
+      spawnLevelUpEffect(chest.x, chest.y, player.level);
+      playSound(880, "triangle", 0.22, 0.09);
+    }
+
+    function applyDamageToHero(rawDmg) {
+      if (player.invulnTimer > 0) return;
+      skills.shield.regenTimer = skills.shield.regenDelay;
+
+      let dmg = Math.max(0.5, rawDmg * (1 - player.dmgReduction));
+      if (skills.shield.current > 0) {
+        const absorbed = Math.min(skills.shield.current, dmg);
+        skills.shield.current -= absorbed;
+        dmg -= absorbed;
+      }
+
+      if (dmg > 0) {
+        player.hp = Math.max(0, player.hp - dmg);
+      }
+      player.invulnTimer = 0.22;
+    }
+
+    function updateSkills(dt) {
+      // Khiên giáp tự hồi sau thời gian không nhận đòn
+      if (skills.shield.regenTimer > 0) {
+        skills.shield.regenTimer = Math.max(0, skills.shield.regenTimer - dt);
+      } else if (skills.shield.current < skills.shield.max) {
+        skills.shield.current = Math.min(skills.shield.max, skills.shield.current + skills.shield.regenRate * dt);
+      }
+
+      // Sét
+      skills.lightning.timer -= dt;
+      if (skills.lightning.timer <= 0) {
+        skills.lightning.timer = skills.lightning.cooldown;
+        castLightningSkill();
+      }
+      for (let i = skills.lightning.bolts.length - 1; i >= 0; i--) {
+        skills.lightning.bolts[i].life -= dt;
+        if (skills.lightning.bolts[i].life <= 0) skills.lightning.bolts.splice(i, 1);
+      }
+
+      // Cầu lửa
+      skills.fireball.timer -= dt;
+      if (skills.fireball.timer <= 0) {
+        skills.fireball.timer = skills.fireball.cooldown;
+        castFireballSkill();
+      }
+      for (let i = skills.fireball.projectiles.length - 1; i >= 0; i--) {
+        const fb = skills.fireball.projectiles[i];
+        fb.life -= dt;
+        fb.trail.push({ x: fb.x, y: fb.y });
+        if (fb.trail.length > 7) fb.trail.shift();
+        fb.x += fb.vx * dt;
+        fb.y += fb.vy * dt;
+
+        let exploded = false;
+        for (const e of enemies) {
+          if (Math.hypot(fb.x - e.x, fb.y - e.y) < e.r + 10) {
+            exploded = true;
+            break;
+          }
+        }
+        if (exploded || fb.life <= 0) {
+          if (exploded) {
+            skills.fireball.explosions.push({ x: fb.x, y: fb.y, radius: 10, maxRadius: skills.fireball.aoeRadius, life: 0.3, maxLife: 0.3 });
+            addParticles(fb.x, fb.y, "#f97316", 12);
+            for (const e of enemies) {
+              if (Math.hypot(e.x - fb.x, e.y - fb.y) <= skills.fireball.aoeRadius + e.r) {
+                damageEnemy(e, skills.fireball.damage);
+              }
+            }
+            cleanupDeadEnemies();
+          }
+          skills.fireball.projectiles.splice(i, 1);
+        }
+      }
+      for (let i = skills.fireball.explosions.length - 1; i >= 0; i--) {
+        const ex = skills.fireball.explosions[i];
+        ex.life -= dt;
+        ex.radius += (ex.maxRadius - ex.radius) * Math.min(1, dt * 12);
+        if (ex.life <= 0) skills.fireball.explosions.splice(i, 1);
+      }
+
+      // Phi tiêu
+      skills.shuriken.timer -= dt;
+      if (skills.shuriken.timer <= 0) {
+        skills.shuriken.timer = skills.shuriken.cooldown;
+        castShurikenSkill();
+      }
+      for (let i = skills.shuriken.projectiles.length - 1; i >= 0; i--) {
+        const sh = skills.shuriken.projectiles[i];
+        sh.life -= dt;
+        sh.x += sh.vx * dt;
+        sh.y += sh.vy * dt;
+        sh.rot += 18 * dt;
+
+        let hit = false;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (Math.hypot(sh.x - e.x, sh.y - e.y) < e.r + 9) {
+            if (damageEnemy(e, skills.shuriken.damage)) enemies.splice(j, 1);
+            hit = true;
+            break;
+          }
+        }
+        if (hit || sh.life <= 0) skills.shuriken.projectiles.splice(i, 1);
+      }
+
+      // Rương báu rơi ngẫu nhiên mỗi 60 giây
+      skills.chest.timer += dt;
+      if (skills.chest.timer >= skills.chest.interval) {
+        skills.chest.timer = 0;
+        spawnTreasureChest();
+      }
+      for (let i = skills.chest.items.length - 1; i >= 0; i--) {
+        const ch = skills.chest.items[i];
+        ch.life -= dt;
+        ch.bob += 4.5 * dt;
+        if (Math.hypot(player.x - ch.x, player.y - ch.y) <= skills.chest.pickupRadius + player.r) {
+          collectTreasureChest(ch);
+          skills.chest.items.splice(i, 1);
+          continue;
+        }
+        if (ch.life <= 0) skills.chest.items.splice(i, 1);
+      }
+    }
+
+    function updateLevelUpFX(dt) {
+      if (levelUpFX.activeTimer > 0) {
+        levelUpFX.activeTimer = Math.max(0, levelUpFX.activeTimer - dt);
+      }
+      for (let i = levelUpFX.rings.length - 1; i >= 0; i--) {
+        const r = levelUpFX.rings[i];
+        r.radius += (r.maxRadius - r.radius) * Math.min(1, dt * 7);
+        r.alpha -= dt * 1.4;
+        if (r.alpha <= 0) levelUpFX.rings.splice(i, 1);
+      }
+      for (let i = levelUpFX.sparks.length - 1; i >= 0; i--) {
+        const s = levelUpFX.sparks[i];
+        s.life -= dt;
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.vx *= 0.96;
+        s.vy *= 0.96;
+        if (s.life <= 0) levelUpFX.sparks.splice(i, 1);
+      }
+    }
+
     function update(dt) {
       if (gameState !== "PLAYING") return;
       elapsedTime += dt;
+      if (player.invulnTimer > 0) player.invulnTimer = Math.max(0, player.invulnTimer - dt);
 
       let mx = joystick.dx;
       let my = joystick.dy;
@@ -327,7 +785,7 @@
       player.orbAngle += player.orbSpeed * dt;
 
       spawnTimer += dt;
-      const spawnInterval = Math.max(0.22, 1.05 - elapsedTime * 0.008);
+      const spawnInterval = Math.max(0.24, 1.05 - elapsedTime * 0.008);
       if (spawnTimer >= spawnInterval) { spawnTimer = 0; spawnEnemy(); }
 
       shootTimer += dt;
@@ -370,7 +828,7 @@
         if (e.orbHitCooldown <= 0) {
           for (const orb of orbs) {
             if (Math.hypot(orb.x - e.x, orb.y - e.y) < orb.r + e.r) {
-              e.orbHitCooldown = 0.28;
+              e.orbHitCooldown = 0.25;
               const pushAng = Math.atan2(e.y - player.y, e.x - player.x);
               const dead = damageEnemy(e, player.orbDamage, Math.cos(pushAng) * 18, Math.sin(pushAng) * 18);
               addParticles(orb.x, orb.y, "#38bdf8", 4);
@@ -381,10 +839,13 @@
         }
 
         if (enemies[i] && Math.hypot(player.x - enemies[i].x, player.y - enemies[i].y) < player.r + enemies[i].r) {
-          player.hp -= enemies[i].damage * dt * 2.2;
-          if (player.hp <= 0) { player.hp = 0; gameOver(); return; }
+          applyDamageToHero(enemies[i].damage * dt * 2.0);
+          if (player.hp <= 0) { gameOver(); return; }
         }
       }
+
+      updateSkills(dt);
+      updateLevelUpFX(dt);
 
       for (let i = gems.length - 1; i >= 0; i--) {
         const g = gems[i];
@@ -436,138 +897,204 @@
       startModal.classList.remove("hidden");
     }
 
-    function drawHero(x, y, facing, stepPhase) {
+    // Fallback vẽ hình khối nếu sprite chưa tải kịp
+    function drawHeroFallback(x, y, facing, stepPhase) {
       ctx.save();
       ctx.translate(x, y);
+      const swing = Math.sin(stepPhase) * 5;
+      ctx.fillStyle = "#0284c7";
+      ctx.beginPath(); ctx.arc(0, 0, 18 + swing * 0.15, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#facc15";
+      ctx.beginPath(); ctx.arc(facing * 7, -4, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
 
+    function drawMonsterFallback(e, t) {
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      const wobble = Math.sin(t * 10 + e.x * 0.05) * 2;
+      ctx.fillStyle = e.hitFlash > 0 ? "#ffffff" : e.color;
+      ctx.beginPath(); ctx.arc(0, wobble * 0.4, e.r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawHero(x, y, facing, stepPhase) {
+      ctx.save();
       ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
       ctx.beginPath();
-      ctx.ellipse(0, 17, 15, 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y + 20, 18, 7, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      const swing = Math.sin(stepPhase) * 5;
-
-      ctx.strokeStyle = "#1e293b";
-      ctx.lineWidth = 5;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(-5, 6);
-      ctx.lineTo(-5 - swing, 16);
-      ctx.moveTo(5, 6);
-      ctx.lineTo(5 + swing, 16);
-      ctx.stroke();
-
-      ctx.fillStyle = "#0284c7";
-      ctx.beginPath();
-      ctx.moveTo(-12, 8);
-      ctx.lineTo(12, 8);
-      ctx.lineTo(8, -8);
-      ctx.lineTo(-8, -8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = "#bae6fd";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      const armOffset = facing * 11;
-      ctx.strokeStyle = "#fde68a";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(0, -2);
-      ctx.lineTo(armOffset, 2 + swing * 0.4);
-      ctx.stroke();
-
-      ctx.strokeStyle = "#facc15";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(armOffset, 6);
-      ctx.lineTo(armOffset + facing * 4, -14);
-      ctx.stroke();
-
-      ctx.fillStyle = "#38bdf8";
-      ctx.beginPath();
-      ctx.arc(armOffset + facing * 4, -16, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#fde68a";
-      ctx.beginPath();
-      ctx.arc(0, -11, 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#0f172a";
-      ctx.beginPath();
-      ctx.arc(facing * 3 - 1.5, -11, 1.6, 0, Math.PI * 2);
-      ctx.arc(facing * 3 + 3.5, -11, 1.6, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#1d4ed8";
-      ctx.beginPath();
-      ctx.moveTo(-12, -15);
-      ctx.lineTo(12, -15);
-      ctx.lineTo(facing * 3, -29);
-      ctx.closePath();
-      ctx.fill();
-
+      const bobY = Math.abs(Math.sin(stepPhase)) * -4;
+      const drawn = drawSprite("hero", x, y + bobY, 52, facing < 0, player.invulnTimer > 0.1);
+      if (!drawn) drawHeroFallback(x, y, facing, stepPhase);
       ctx.restore();
     }
 
     function drawMonster(e, t) {
-      ctx.save();
-      ctx.translate(e.x, e.y);
+      const bobY = Math.sin(t * 9 + e.x * 0.05) * 2.5;
+      const size = e.kind === "brute" ? 58 : 42;
+      const flip = e.x > player.x;
+      const drawn = drawSprite(e.sprite || "mob", e.x, e.y + bobY, size, flip, e.hitFlash > 0);
+      if (!drawn) drawMonsterFallback(e, t);
+    }
 
-      const wobble = Math.sin(t * 10 + e.x * 0.05) * 2;
-      const bodyColor = e.hitFlash > 0 ? "#ffffff" : e.color;
-
-      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-      ctx.beginPath();
-      ctx.ellipse(0, e.r + 2, e.r * 0.85, e.r * 0.3, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (e.kind !== "runner") {
-        ctx.fillStyle = "#fef08a";
+    function drawSkillsLayer() {
+      // 1. Khiên giáp bảo vệ quanh hero
+      if (skills.shield.current > 0) {
+        const ratio = skills.shield.current / skills.shield.max;
+        ctx.save();
+        ctx.strokeStyle = `rgba(56, 189, 248, ${0.35 + 0.5 * ratio})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 6]);
         ctx.beginPath();
-        ctx.moveTo(-e.r * 0.55, -e.r * 0.55);
-        ctx.lineTo(-e.r * 0.85, -e.r * 1.15);
-        ctx.lineTo(-e.r * 0.15, -e.r * 0.75);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(e.r * 0.55, -e.r * 0.55);
-        ctx.lineTo(e.r * 0.85, -e.r * 1.15);
-        ctx.lineTo(e.r * 0.15, -e.r * 0.75);
-        ctx.closePath();
-        ctx.fill();
+        ctx.arc(player.x, player.y, 34, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
 
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      ctx.arc(0, wobble * 0.4, e.r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+      // 2. Vòng bảo vệ quay quanh
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.22)";
       ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.orbRadius, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
 
-      const eyeY = -e.r * 0.1 + wobble * 0.4;
-      ctx.fillStyle = "#fef9c3";
-      ctx.beginPath();
-      ctx.arc(-e.r * 0.34, eyeY, e.r * 0.22, 0, Math.PI * 2);
-      ctx.arc(e.r * 0.34, eyeY, e.r * 0.22, 0, Math.PI * 2);
-      ctx.fill();
+      for (let i = 0; i < player.orbCount; i++) {
+        const a = player.orbAngle + (i * Math.PI * 2) / player.orbCount;
+        const ox = player.x + Math.cos(a) * player.orbRadius;
+        const oy = player.y + Math.sin(a) * player.orbRadius;
+        const grad = ctx.createRadialGradient(ox, oy, 2, ox, oy, player.orbSize * 2.1);
+        grad.addColorStop(0, "rgba(56, 189, 248, 0.9)");
+        grad.addColorStop(1, "rgba(56, 189, 248, 0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(ox, oy, player.orbSize * 2.1, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#e0f2fe";
+        ctx.beginPath(); ctx.arc(ox, oy, player.orbSize, 0, Math.PI * 2); ctx.fill();
+      }
 
-      ctx.fillStyle = "#090d16";
-      ctx.beginPath();
-      ctx.arc(-e.r * 0.34, eyeY, e.r * 0.11, 0, Math.PI * 2);
-      ctx.arc(e.r * 0.34, eyeY, e.r * 0.11, 0, Math.PI * 2);
-      ctx.fill();
+      // 3. Tia sét đánh chuỗi
+      for (const bolt of skills.lightning.bolts) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, bolt.life / bolt.maxLife);
+        ctx.strokeStyle = bolt.color;
+        ctx.shadowColor = "#38bdf8";
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        bolt.points.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+        ctx.stroke();
+        ctx.restore();
+      }
 
-      ctx.strokeStyle = "#090d16";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, e.r * 0.25 + wobble * 0.4, e.r * 0.35, 0.15 * Math.PI, 0.85 * Math.PI);
-      ctx.stroke();
+      // 4. Cầu lửa & vụ nổ AoE
+      for (const fb of skills.fireball.projectiles) {
+        fb.trail.forEach((tr, idx) => {
+          const r = (idx + 1) / fb.trail.length;
+          ctx.fillStyle = `rgba(251, 146, 60, ${r * 0.45})`;
+          ctx.beginPath(); ctx.arc(tr.x, tr.y, 9 * r, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.save();
+        ctx.shadowColor = "#ef4444";
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = "#f97316";
+        ctx.beginPath(); ctx.arc(fb.x, fb.y, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fef08a";
+        ctx.beginPath(); ctx.arc(fb.x, fb.y, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
 
-      ctx.restore();
+      for (const ex of skills.fireball.explosions) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, ex.life / ex.maxLife) * 0.75;
+        ctx.fillStyle = "rgba(249, 115, 22, 0.35)";
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(ex.x, ex.y, ex.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+
+      // 5. Phi tiêu xoay
+      for (const sh of skills.shuriken.projectiles) {
+        ctx.save();
+        ctx.translate(sh.x, sh.y);
+        ctx.rotate(sh.rot);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.strokeStyle = "#475569";
+        ctx.lineWidth = 1.5;
+        for (let k = 0; k < 4; k++) {
+          ctx.rotate(Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(0, 0); ctx.lineTo(11, -3); ctx.lineTo(15, 0); ctx.lineTo(11, 3);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 6. Rương báu rơi ngẫu nhiên mỗi 60s
+      for (const ch of skills.chest.items) {
+        const bobY = ch.y + Math.sin(ch.bob) * 5;
+        ctx.save();
+        ctx.shadowColor = "#facc15";
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = "rgba(250, 204, 21, 0.25)";
+        ctx.beginPath(); ctx.ellipse(ch.x, ch.y + 14, 22, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = "#f59e0b";
+        ctx.strokeStyle = "#78350f";
+        ctx.lineWidth = 2.5;
+        ctx.fillRect(ch.x - 15, bobY - 12, 30, 22);
+        ctx.strokeRect(ch.x - 15, bobY - 12, 30, 22);
+
+        ctx.fillStyle = "#fef08a";
+        ctx.fillRect(ch.x - 4, bobY - 4, 8, 7);
+        ctx.restore();
+      }
+    }
+
+    function drawLevelUpFXLayer() {
+      if (levelUpFX.activeTimer > 0) {
+        const prog = 1 - levelUpFX.activeTimer / levelUpFX.maxDuration;
+        const fade = Math.sin(prog * Math.PI);
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(prog * Math.PI * 3);
+        const grad = ctx.createRadialGradient(0, 0, 10, 0, 0, 72);
+        grad.addColorStop(0, `rgba(253, 224, 71, ${0.35 * fade})`);
+        grad.addColorStop(0.6, `rgba(56, 189, 248, ${0.22 * fade})`);
+        grad.addColorStop(1, "rgba(56, 189, 248, 0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(0, 0, 72, 0, Math.PI * 2); ctx.fill();
+
+        for (let i = 0; i < 8; i++) {
+          ctx.rotate(Math.PI / 4);
+          ctx.strokeStyle = `rgba(253, 224, 71, ${0.7 * fade})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(52, 0); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      for (const r of levelUpFX.rings) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, r.alpha);
+        ctx.strokeStyle = r.color;
+        ctx.lineWidth = r.width;
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+
+      for (const s of levelUpFX.sparks) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, s.life / s.maxLife);
+        ctx.fillStyle = s.color;
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
     }
 
     function render(now) {
@@ -604,24 +1131,7 @@
           ctx.beginPath(); ctx.arc(g.x - 2, g.y - 2, g.r * 0.35, 0, Math.PI * 2); ctx.fill();
         }
 
-        ctx.strokeStyle = "rgba(56, 189, 248, 0.22)";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath(); ctx.arc(player.x, player.y, player.orbRadius, 0, Math.PI * 2); ctx.stroke();
-        ctx.setLineDash([]);
-
-        for (let i = 0; i < player.orbCount; i++) {
-          const a = player.orbAngle + (i * Math.PI * 2) / player.orbCount;
-          const ox = player.x + Math.cos(a) * player.orbRadius;
-          const oy = player.y + Math.sin(a) * player.orbRadius;
-          const grad = ctx.createRadialGradient(ox, oy, 2, ox, oy, player.orbSize * 2.1);
-          grad.addColorStop(0, "rgba(56, 189, 248, 0.9)");
-          grad.addColorStop(1, "rgba(56, 189, 248, 0)");
-          ctx.fillStyle = grad;
-          ctx.beginPath(); ctx.arc(ox, oy, player.orbSize * 2.1, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = "#e0f2fe";
-          ctx.beginPath(); ctx.arc(ox, oy, player.orbSize, 0, Math.PI * 2); ctx.fill();
-        }
+        drawSkillsLayer();
 
         for (const b of bullets) {
           ctx.fillStyle = "#facc15";
@@ -633,8 +1143,9 @@
         }
 
         drawHero(player.x, player.y, player.facing, walkPhase);
+        drawLevelUpFXLayer();
 
-        const hpW = 44, hpH = 6;
+        const hpW = 48, hpH = 6;
         const hpX = player.x - hpW / 2;
         const hpY = player.y + player.r + 8;
         ctx.fillStyle = "#1e293b";
@@ -652,7 +1163,7 @@
         ctx.font = "bold 13px sans-serif";
         ctx.textAlign = "center";
         for (const ft of floatTexts) {
-          ctx.globalAlpha = Math.max(0, ft.life / 0.65);
+          ctx.globalAlpha = Math.max(0, ft.life / 0.75);
           ctx.fillStyle = ft.color;
           ctx.fillText(ft.text, ft.x, ft.y);
         }
